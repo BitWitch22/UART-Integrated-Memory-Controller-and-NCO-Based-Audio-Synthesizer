@@ -18,9 +18,10 @@ module mem_controller #(
   localparam NUM_BYTES_PER_WORD = MEM_WIDTH/8;
   localparam MEM_ADDR_WIDTH = $clog2(MEM_DEPTH); 
 
-  wire [NUM_BYTES_PER_WORD-1:0] mem_we = 0;
-  wire [MEM_ADDR_WIDTH-1:0] mem_addr;
-  wire [MEM_WIDTH-1:0] mem_din;
+  // Converted from wires to regs to allow assignment in the always block
+  reg [NUM_BYTES_PER_WORD-1:0] mem_we_logic;
+  reg [MEM_ADDR_WIDTH-1:0] mem_addr_logic;
+  reg [MEM_WIDTH-1:0] mem_din_logic;
   wire [MEM_WIDTH-1:0] mem_dout;
 
   SYNC_RAM_WBE #(
@@ -29,9 +30,9 @@ module mem_controller #(
   ) mem (
     .clk(clk),
     .en(1'b1),
-    .wbe(mem_we),
-    .addr(mem_addr),
-    .d(mem_din),
+    .wbe(mem_we_logic),
+    .addr(mem_addr_logic),
+    .d(mem_din_logic),
     .q(mem_dout)
   );
 
@@ -45,52 +46,119 @@ module mem_controller #(
     WRITE_MEM_VAL = 3'd6;
 
   wire [2:0] curr_state;
-  wire [2:0] next_state;
+  reg  [2:0] next_state;
 
   /* State Update */
   REGISTER_R #(.N(3), .INIT(IDLE)) state_reg (
     .q(curr_state), .d(next_state), .rst(rst), .clk(clk)
   );
 
-  wire [2:0] pkt_rd_cnt;
   wire [MEM_WIDTH-1:0] cmd;
   wire [MEM_WIDTH-1:0] addr;
   wire [MEM_WIDTH-1:0] data;
-  wire handshake;
 
-  /* Registers for byte reading and packet counting */
+  /* Registers for byte reading */
+  // Data is continuously sampled while in these states. The final value 
+  // correctly latches exactly as the FSM transitions to the next state.
+  wire cmd_ce = (curr_state == READ_CMD);
+  REGISTER_CE #(.N(MEM_WIDTH)) cmd_reg (
+    .q(cmd), .d(din), .ce(cmd_ce), .clk(clk)
+  );
+
+  wire addr_ce = (curr_state == READ_ADDR);
+  REGISTER_CE #(.N(MEM_WIDTH)) addr_reg (
+    .q(addr), .d(din), .ce(addr_ce), .clk(clk)
+  );
+
+  wire data_ce = (curr_state == READ_DATA);
+  REGISTER_CE #(.N(MEM_WIDTH)) data_reg (
+    .q(data), .d(din), .ce(data_ce), .clk(clk)
+  );
+
+  // Internal routing for outputs
+  reg rx_fifo_rd_en_logic;
+  reg tx_fifo_wr_en_logic;
+  reg [FIFO_WIDTH-1:0] dout_logic;
+
+  /* Next State Logic */
+  always @(*) begin
+    /* initial values to avoid latch synthesis */
+    next_state = curr_state;
+
+    case (curr_state)
+      IDLE: begin
+        if (~rx_fifo_empty) next_state = READ_CMD;
+      end
+      READ_CMD: begin
+        if (~rx_fifo_empty) next_state = READ_ADDR;
+      end
+      READ_ADDR: begin
+        if (cmd == 8'd49) begin // '1' = Write Command
+          if (~rx_fifo_empty) next_state = READ_DATA;
+        end else if (cmd == 8'd48) begin // '0' = Read Command
+          next_state = READ_MEM_VAL;
+        end else begin
+          next_state = IDLE; // Fallback recovery for garbage data
+        end
+      end
+      READ_DATA: begin
+        next_state = WRITE_MEM_VAL;
+      end
+      READ_MEM_VAL: begin
+        next_state = ECHO_VAL;
+      end
+      ECHO_VAL: begin
+        if (~tx_fifo_full) next_state = IDLE;
+      end
+      WRITE_MEM_VAL: begin
+        next_state = IDLE;
+      end
+    endcase
+  end
+
+  /* Output and Mem Signal Logic */
+  always @(*) begin
+    /* initial values to avoid latch synthesis */
+    rx_fifo_rd_en_logic = 1'b0;
+    tx_fifo_wr_en_logic = 1'b0;
+    mem_we_logic        = 1'b0;
+    mem_addr_logic      = addr[MEM_ADDR_WIDTH-1:0];
+    mem_din_logic       = data;
+    dout_logic          = mem_dout;
+    
+    case (curr_state)
+      IDLE: begin
+        rx_fifo_rd_en_logic = ~rx_fifo_empty;
+      end
+      READ_CMD: begin
+        rx_fifo_rd_en_logic = ~rx_fifo_empty;
+      end
+      READ_ADDR: begin
+        if (cmd == 8'd49) begin
+          rx_fifo_rd_en_logic = ~rx_fifo_empty;
+        end
+      end
+      READ_DATA: begin
+        // Wait state for next_state transition. The 'data' register handles capture.
+      end
+      READ_MEM_VAL: begin
+        // RAM automatically reads mem_addr_logic when en=1 and wbe=0
+      end
+      ECHO_VAL: begin
+        tx_fifo_wr_en_logic = ~tx_fifo_full;
+      end
+      WRITE_MEM_VAL: begin
+        mem_we_logic = 1'b1;
+      end
+    endcase
+  end
+
+  // Output Assignments
+  assign rx_fifo_rd_en = rx_fifo_rd_en_logic;
+  assign tx_fifo_wr_en = tx_fifo_wr_en_logic;
+  assign dout = dout_logic;
   
-  always @(*) begin
-    
-    /* initial values to avoid latch synthesis */
-
-    case (curr_state)
-
-      /* next state logic */
-
-    endcase
-
-  end
-
-  always @(*) begin
-    
-    /* initial values to avoid latch synthesis */
-    
-    case (curr_state)
-
-      /* output and mem signal logic */
-      
-    endcase
-
-  end
-
-
-  /* TODO: MODIFY THIS */
-  assign state_leds = 'd0;
-
-  /* TODO: MODIFY/REMOVE THIS */
-  assign rx_fifo_rd_en = 'd0;
-  assign tx_fifo_wr_en = 'd0;
-  assign dout = 'd0;
+  // Pad the 3-bit state variable with zeros to fill the 6-bit state_leds output
+  assign state_leds = {3'b000, curr_state};
 
 endmodule
