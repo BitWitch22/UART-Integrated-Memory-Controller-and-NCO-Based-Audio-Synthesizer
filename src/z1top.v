@@ -1,5 +1,5 @@
 module z1top #(
-    parameter CLOCK_FREQ = 125_000_000,
+    parameter CLOCK_FREQ = 100_000_000,
     parameter BAUD_RATE = 115_200,
     /* verilator lint_off REALCVT */
     // Sample the button signal every 500us
@@ -7,9 +7,9 @@ module z1top #(
     // The button is considered 'pressed' after 100ms of continuous pressing
     parameter integer B_PULSE_CNT_MAX = 0.100 / 0.0005,
     /* lint_on */
-    parameter CYCLES_PER_SECOND = 125_000_000
+    parameter CYCLES_PER_SECOND = 100_000_000
 ) (
-    input CLK_125MHZ_FPGA,
+    input CLK_100MHZ_FPGA,
     input [3:0] BUTTONS,
     input [1:0] SWITCHES,
     output [5:0] LEDS,
@@ -28,13 +28,13 @@ module z1top #(
         .SAMPLE_CNT_MAX(B_SAMPLE_CNT_MAX),
         .PULSE_CNT_MAX(B_PULSE_CNT_MAX)
     ) bp (
-        .clk(CLK_125MHZ_FPGA),
+        .clk(CLK_100MHZ_FPGA),
         .in(BUTTONS),
         .out({buttons_pressed, reset})
     );
 
     synchronizer #(.WIDTH(2)) switch_sync (
-        .clk(CLK_125MHZ_FPGA),
+        .clk(CLK_100MHZ_FPGA),
         .async_signal(SWITCHES),
         .sync_signal(switches_sync)
     );
@@ -52,11 +52,10 @@ module z1top #(
 
 //------------------------- UART ---------------------------
     // This UART is on the FPGA and communicates with your desktop
-    // using the FPGA_SERIAL_TX, and FPGA_SERIAL_RX signals. The ready/valid
-    // interface for this UART is used on the FPGA design.
+    // using the FPGA_SERIAL_TX, and FPGA_SERIAL_RX signals. 
     uart # (.CLOCK_FREQ(CLOCK_FREQ),.BAUD_RATE(BAUD_RATE)) 
     on_chip_uart (
-        .clk(CLK_125MHZ_FPGA),
+        .clk(CLK_100MHZ_FPGA),
         .reset(reset),
         .data_in(data_in),
         .data_in_valid(data_in_valid),
@@ -78,7 +77,7 @@ module z1top #(
 
     fifo #(.WIDTH(8), .DEPTH(8)) 
     rx_fifo (
-        .clk(CLK_125MHZ_FPGA), .rst(reset),
+        .clk(CLK_100MHZ_FPGA), .rst(reset),
         .wr_en(data_out_valid && ~rx_fifo_full),
         .din(data_out),
         .full(rx_fifo_full),
@@ -86,7 +85,6 @@ module z1top #(
         .dout(rx_dout),
         .empty(rx_fifo_empty)
     );
-
 
 //------------------------- TX FIFO ---------------------------
     wire [7:0] tx_din, fl_din, mem_din;
@@ -96,15 +94,20 @@ module z1top #(
     assign tx_wr_en = switches_sync[0] ? fl_tx_wr_en : mem_tx_wr_en;
 
     wire tx_fifo_empty;
-    reg tx_fifo_empty_delayed;
+    wire tx_fifo_empty_delayed;
+    
+    // Replaced the always block with a structural register for synthesis compatibility
+    REGISTER #(.N(1)) tx_delay_reg (
+        .q(tx_fifo_empty_delayed),
+        .d(tx_fifo_empty),
+        .clk(CLK_100MHZ_FPGA)
+    );
+    
     assign data_in_valid = ~tx_fifo_empty_delayed;
-    always @(posedge CLK_125MHZ_FPGA) begin
-        tx_fifo_empty_delayed <= tx_fifo_empty;
-    end
 
     fifo #(.WIDTH(8), .DEPTH(8)) 
     tx_fifo (
-        .clk(CLK_125MHZ_FPGA), .rst(reset),
+        .clk(CLK_100MHZ_FPGA), .rst(reset),
         .wr_en(tx_wr_en),
         .din(tx_din),
         .full(tx_fifo_full),
@@ -113,12 +116,10 @@ module z1top #(
         .empty(tx_fifo_empty)
     );
 
-
-
 //------------------------- MEM CONTROLLER ---------------------------
     mem_controller #(.FIFO_WIDTH(8)) 
     mem_ctrl (
-      .clk(CLK_125MHZ_FPGA),.rst(reset),
+      .clk(CLK_100MHZ_FPGA),.rst(reset),
       .rx_fifo_empty(rx_fifo_empty),
       .tx_fifo_full(tx_fifo_full),
       .din(rx_dout),    
@@ -137,7 +138,7 @@ module z1top #(
     wire next_sample;
 
     dac dac (
-        .clk(CLK_125MHZ_FPGA),
+        .clk(CLK_100MHZ_FPGA),
         .rst(reset),
         .code(code),
         .next_sample(next_sample),
@@ -145,7 +146,7 @@ module z1top #(
     );
 
     nco nco (
-        .clk(CLK_125MHZ_FPGA),
+        .clk(CLK_100MHZ_FPGA),
         .rst(reset),
         .fcw(fcw),
         .next_sample(next_sample),
@@ -155,7 +156,7 @@ module z1top #(
     fixed_length_piano #(
         .CYCLES_PER_SECOND(CYCLES_PER_SECOND)) 
     fl_piano (
-        .clk(CLK_125MHZ_FPGA),.rst(reset),
+        .clk(CLK_100MHZ_FPGA),.rst(reset),
         .buttons(buttons_pressed),
         .leds(fl_leds),
         .ua_tx_din(fl_din),

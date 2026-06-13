@@ -1,5 +1,5 @@
 module uart #(
-    parameter CLOCK_FREQ = 125_000_000,
+    parameter CLOCK_FREQ = 100_000_000,
     parameter BAUD_RATE = 115_200
 ) (
     input clk,
@@ -16,13 +16,26 @@ module uart #(
     input serial_in,
     output serial_out
 );
-    reg serial_in_reg, serial_out_reg;
+
+    wire serial_in_reg, serial_out_reg;
     wire serial_out_tx;
     assign serial_out = serial_out_reg;
-    always @ (posedge clk) begin
-        serial_out_reg <= reset ? 1'b1 : serial_out_tx;
-        serial_in_reg <= reset ? 1'b1 : serial_in;
-    end
+
+    // Replaced the always @(posedge clk) block with EECS151 structural registers.
+    // UART rests high, so the INIT state must be 1'b1.
+    REGISTER_R #(.N(1), .INIT(1'b1)) serial_out_register (
+        .q(serial_out_reg),
+        .d(serial_out_tx),
+        .rst(reset),
+        .clk(clk)
+    );
+
+    REGISTER_R #(.N(1), .INIT(1'b1)) serial_in_register (
+        .q(serial_in_reg),
+        .d(serial_in),
+        .rst(reset),
+        .clk(clk)
+    );
 
     uart_transmitter #(
         .CLOCK_FREQ(CLOCK_FREQ),
@@ -47,4 +60,5 @@ module uart #(
         .data_out_ready(data_out_ready),
         .serial_in(serial_in_reg)
     );
+
 endmodule

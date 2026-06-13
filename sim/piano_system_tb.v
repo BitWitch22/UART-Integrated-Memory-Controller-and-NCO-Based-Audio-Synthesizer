@@ -6,7 +6,7 @@
 `define B_SAMPLE_CNT_MAX 5
 `define B_PULSE_CNT_MAX 5
 
-`define CLOCK_FREQ 125_000_000
+`define CLOCK_FREQ 100_000_000
 `define BAUD_RATE 115_200
 // Number of cycles to send one character using the UART
 `define CYCLES_PER_CHAR ((`CLOCK_FREQ / `BAUD_RATE) * 10)

@@ -1,7 +1,7 @@
 `timescale 1ns/1ps
 
 `define CLOCK_PERIOD 8
-`define CLOCK_FREQ 125_000_000
+`define CLOCK_FREQ 100_000_000
 `define BAUD_RATE 115_200
 
 /*

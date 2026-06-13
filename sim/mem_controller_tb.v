@@ -144,16 +144,17 @@ module mem_controller_tb();
         end
     endtask
 
+    // Loop variable declared at task/module scope (Verilog-2001 compatible)
+    integer w_idx;
 
     task send_n_writes;
         input [7:0] n;
         begin
+            for (w_idx = 0; w_idx < n; w_idx = w_idx + 1) begin
 
-            for (integer w = 0; w < n; w += 1) begin
-
-                write_to_rx_fifo(test_write[w][7:0]);   /* command */
-                write_to_rx_fifo(test_write[w][15:8]);  /* addr */  
-                write_to_rx_fifo(test_write[w][23:16]); /* data */
+                write_to_rx_fifo(test_write[w_idx][7:0]);   /* command */
+                write_to_rx_fifo(test_write[w_idx][15:8]);  /* addr */  
+                write_to_rx_fifo(test_write[w_idx][23:16]); /* data */
 
                 wait (verified_write == 1);
 
@@ -165,32 +166,26 @@ module mem_controller_tb();
     reg [7:0] verify_addr;
     reg [7:0] verify_data;
 
+    integer vw_idx;
+
     task verify_n_writes;
         input [7:0] n;
         begin
-            for (integer w = 0; w < n; w += 1) begin
+            for (vw_idx = 0; vw_idx < n; vw_idx = vw_idx + 1) begin
 
                 verified_write = 0;
 
-                verify_addr = test_write[w][15:8];
-                verify_data = test_write[w][23:16];
-               
-                // wait (tb_rx_dout == 8'd49);               
-
-                // wait (~rx_fifo_empty && mem_rx_rd_en) begin
-                //     @(posedge clk);
-                //     #1; 
-                //     verify_addr = rx_dout;
-                // end
-
-                // wait (~rx_fifo_empty && mem_rx_rd_en) begin
-                //     @(posedge clk);
-                //     #1; 
-                //     verify_data = rx_dout;
-                // end
+                verify_addr = test_write[vw_idx][15:8];
+                verify_data = test_write[vw_idx][23:16];
 
                 repeat (10) @(posedge clk);
-                assert (mem_ctrl.mem.mem[verify_addr] == verify_data) $display("PASSED! Expected : %d Actual %d", verify_data, mem_ctrl.mem.mem[verify_addr]); else $error("FAILED! Expected : %d Actual %d", verify_data, mem_ctrl.mem.mem[verify_addr]);
+
+                if (mem_ctrl.mem.mem[verify_addr] == verify_data)
+                    $display("PASSED! Expected : %d Actual %d", verify_data, mem_ctrl.mem.mem[verify_addr]);
+                else begin
+                    $display("FAILED! Expected : %d Actual %d", verify_data, mem_ctrl.mem.mem[verify_addr]);
+                    tests_failed = tests_failed + 1;
+                end
 
                 verified_write = 1;
                 #1;
@@ -201,14 +196,15 @@ module mem_controller_tb();
 
     reg verified_read = 0;
 
+    integer sr_idx;
+
     task send_n_reads;
         input [7:0] n;
         begin
+            for (sr_idx = 0; sr_idx < n; sr_idx = sr_idx + 1) begin
 
-            for (integer w = 0; w < n; w += 1) begin
-
-                write_to_rx_fifo(test_read[w][7:0]);   /* command */
-                write_to_rx_fifo(test_read[w][15:8]);  /* addr */ 
+                write_to_rx_fifo(test_read[sr_idx][7:0]);   /* command */
+                write_to_rx_fifo(test_read[sr_idx][15:8]);  /* addr */ 
 
                 wait (verified_read == 1);
 
@@ -219,19 +215,23 @@ module mem_controller_tb();
 
     reg [FIFO_WIDTH-1 : 0] read_data;
 
+    integer vr_idx;
+
     task verify_n_reads;
         input [7:0] n;
 
         begin
-            for (integer w = 0; w < n; w += 1) begin
+            for (vr_idx = 0; vr_idx < n; vr_idx = vr_idx + 1) begin
 
                 verified_read = 0;
 
                 read_from_tx_fifo(read_data);
 
-                assert (read_data == test_read_vals[w]) $display("PASSED! Expected : %d Actual %d", test_read_vals[w], read_data); else begin
-                    $error("FAILED! Expected : %d Actual %d", test_read_vals[w], read_data);
-                    tests_failed += 1;
+                if (read_data == test_read_vals[vr_idx])
+                    $display("PASSED! Expected : %d Actual %d", test_read_vals[vr_idx], read_data);
+                else begin
+                    $display("FAILED! Expected : %d Actual %d", test_read_vals[vr_idx], read_data);
+                    tests_failed = tests_failed + 1;
                 end
 
                 @(posedge clk); // Wait for the cycle to end
@@ -243,7 +243,7 @@ module mem_controller_tb();
     endtask
     
 
-    integer i, z;
+    integer i, z, t;
     initial begin: TB
 
         `ifndef IVERILOG
@@ -266,7 +266,7 @@ module mem_controller_tb();
         `endif
 
         /* Initialize write sequence */
-        for (i = 0; i < NUM_WRITES; i += 1) begin
+        for (i = 0; i < NUM_WRITES; i = i + 1) begin
             test_write[i][7:0] = 8'd49;
             test_write[i][15:8] = 10 + i;
             test_write[i][23:16] = CHAR0 + i;
@@ -336,9 +336,11 @@ module mem_controller_tb();
 
         /* Check write */
 
-        assert (mem_ctrl.mem.mem[test_write[8][15:8]] == test_write[8][23:16]) $display("PASSED! Expected : %d Actual %d", test_write[8][23:16], mem_ctrl.mem.mem[test_write[8][15:8]]); else begin
-            $error("FAILED! Expected : %d Actual %d", test_write[8][23:16], mem_ctrl.mem.mem[test_write[8][15:8]]);
-            tests_failed += 1;
+        if (mem_ctrl.mem.mem[test_write[8][15:8]] == test_write[8][23:16])
+            $display("PASSED! Expected : %d Actual %d", test_write[8][23:16], mem_ctrl.mem.mem[test_write[8][15:8]]);
+        else begin
+            $display("FAILED! Expected : %d Actual %d", test_write[8][23:16], mem_ctrl.mem.mem[test_write[8][15:8]]);
+            tests_failed = tests_failed + 1;
         end
 
         repeat (10) @(posedge clk);
@@ -364,13 +366,15 @@ module mem_controller_tb();
 
         /* Drain FIFO */
 
-        for (integer t = 0; t < 10; t += 1) begin
+        for (t = 0; t < 10; t = t + 1) begin
             read_from_tx_fifo(read_data);
         end
 
-        assert (read_data == test_read_vals[9]) $display("PASSED! Expected : %d Actual %d", test_read_vals[9], read_data); else begin
-            $error("FAILED! Expected : %d Actual %d", test_read_vals[9], read_data);
-            tests_failed += 1;
+        if (read_data == test_read_vals[9])
+            $display("PASSED! Expected : %d Actual %d", test_read_vals[9], read_data);
+        else begin
+            $display("FAILED! Expected : %d Actual %d", test_read_vals[9], read_data);
+            tests_failed = tests_failed + 1;
         end
 
         repeat (10) @(posedge clk);
@@ -392,8 +396,8 @@ module mem_controller_tb();
 
     initial begin
         repeat (75000) @(posedge clk);
-        $error("Timing out");
-        $fatal();
+        $display("Timing out");
+        $fatal;
     end
 
 endmodule

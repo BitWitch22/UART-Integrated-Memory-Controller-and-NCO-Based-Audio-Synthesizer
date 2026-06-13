@@ -3,12 +3,23 @@ module synchronizer #(parameter WIDTH = 1) (
     input clk,
     output [WIDTH-1:0] sync_signal
 );
-    // TODO: Create your 2 flip-flop synchronizer here
-    // This module takes in a vector of WIDTH-bit asynchronous
-    // (from different clock domain or not clocked, such as button press) signals
-    // and should output a vector of WIDTH-bit synchronous signals
-    // that are synchronized to the input clk
+    // Intermediate wire connecting the two flip-flop stages
+    wire [WIDTH-1:0] stage1_out;
 
-    // Remove this line once you create your synchronizer
-    assign sync_signal = 0;
+    // First stage: Captures the asynchronous input
+    // This flip-flop may go metastable if async_signal transitions exactly on the clock edge
+    REGISTER #(.N(WIDTH)) stage1_reg (
+        .q(stage1_out),
+        .d(async_signal),
+        .clk(clk)
+    );
+
+    // Second stage: Captures the output of the first stage
+    // Provides a full clock cycle for any metastability in stage1_out to settle
+    REGISTER #(.N(WIDTH)) stage2_reg (
+        .q(sync_signal),
+        .d(stage1_out),
+        .clk(clk)
+    );
+
 endmodule

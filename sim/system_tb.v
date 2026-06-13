@@ -4,8 +4,8 @@
 `define B_SAMPLE_CNT_MAX 5
 `define B_PULSE_CNT_MAX 5
 
-`define CLOCK_FREQ 125_000_000
-`define BAUD_RATE 25_000_000 
+`define CLOCK_FREQ 100_000_000
+`define BAUD_RATE 115_200
 `define CYCLES_PER_CHAR ((`CLOCK_FREQ / `BAUD_RATE) * 10) // Number of cycles to send one packet using the UART
 `define CYCLES_PER_SECOND (`CYCLES_PER_CHAR * 6)
 
@@ -89,6 +89,7 @@ module system_tb();
   endtask
 
   /* Define a task that checks data received by the off_chip_uart from z1_top */
+  // All variables declared at top of task (Verilog-2001 compatible)
   task off_chip_uart_receive;
     input [7:0] data;
     begin
@@ -96,10 +97,12 @@ module system_tb();
             @(posedge clk);
         end
         #1;
-        off_chip_data_out_ready = 1'b0;   
-        assert(off_chip_data_out == data) $display("PASSED! Expected : %d Actual %d", data, off_chip_data_out); else begin
-          $error("FAILED! Expected : %d Actual %d, TX_FIFO_out is %d", data, off_chip_data_out, top.data_in);
-          tests_failed += 1;
+        off_chip_data_out_ready = 1'b0;
+        if (off_chip_data_out == data)
+            $display("PASSED! Expected : %d Actual %d", data, off_chip_data_out);
+        else begin
+            $display("FAILED! Expected : %d Actual %d, TX_FIFO_out is %d", data, off_chip_data_out, top.data_in);
+            tests_failed = tests_failed + 1;
         end
         @(posedge clk);
         off_chip_data_out_ready = 1'b1;   // so the off_chip_rx_fifo will clear the "has byte" again
@@ -148,12 +151,12 @@ module system_tb();
     end
   endtask 
 
-  integer z;
+  integer z, i;
   initial begin
 
     `ifndef IVERILOG
         $vcdpluson;
-	      $vcdplusmemon;
+        $vcdplusmemon;
     `endif
     `ifdef IVERILOG
         $dumpfile("system_tb.fst");
@@ -184,25 +187,25 @@ module system_tb();
 
     // simple W-R test
     $display("------- Running simple test -------");
-    assert(FPGA_SERIAL_TX == 1'b1);
-    assert(FPGA_SERIAL_RX == 1'b1);
+    if (FPGA_SERIAL_TX !== 1'b1) $display("WARNING: FPGA_SERIAL_TX not idle");
+    if (FPGA_SERIAL_RX !== 1'b1) $display("WARNING: FPGA_SERIAL_RX not idle");
     $display("------- Write a Byte -------");
-    write_packet(8'd11, CHAR0,1'b0);
+    write_packet(8'd11, CHAR0, 1'b0);
     repeat(`CYCLES_PER_CHAR * 5) @(posedge clk);
     $display("------- Read a Byte -------");
-    read_packet(8'd11, CHAR0,1'b0);
+    read_packet(8'd11, CHAR0, 1'b0);
 
     repeat(10) @(posedge clk);
 
     // consecutive W, then R 
     $display("------- Running harder test -------");
-    assert(FPGA_SERIAL_TX == 1'b1);
-    assert(FPGA_SERIAL_RX == 1'b1);
-    for(integer i = 0; i < NUM_CHARS; i += 1) begin
-          write_packet(8'd0+i, CHAR0+i,1'b0);
+    if (FPGA_SERIAL_TX !== 1'b1) $display("WARNING: FPGA_SERIAL_TX not idle");
+    if (FPGA_SERIAL_RX !== 1'b1) $display("WARNING: FPGA_SERIAL_RX not idle");
+    for(i = 0; i < NUM_CHARS; i = i + 1) begin
+          write_packet(8'd0 + i, CHAR0 + i, 1'b0);
     end
-    for(integer i = NUM_CHARS-1; i >= 0; i -= 1) begin
-          read_packet(8'd0+i, CHAR0+i,1'b0);
+    for(i = NUM_CHARS - 1; i >= 0; i = i - 1) begin
+          read_packet(8'd0 + i, CHAR0 + i, 1'b0);
     end
 
     $display("All tests done!");
@@ -248,11 +251,7 @@ module system_tb();
   
   initial begin
       repeat (`CYCLES_PER_CHAR * 500) @(posedge clk);
-      $error("Timing out");
-      $fatal();
+      $display("Timing out");
+      $fatal;
   end
 endmodule
-
-
-
-

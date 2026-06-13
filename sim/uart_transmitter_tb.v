@@ -2,7 +2,7 @@
 
 // UART_Transmitter is essentially a reverse of UART_Receiver
 module uart_transmitter_tb();
-  localparam CLOCK_FREQ   = 125_000_000;
+  localparam CLOCK_FREQ   = 100_000_000;
   localparam CLOCK_PERIOD = 1_000_000_000 / CLOCK_FREQ;
   localparam BAUD_RATE    = 115_200;
   localparam integer BAUD_PERIOD  = 1_000_000_000 / BAUD_RATE; // 8680.55 ns
