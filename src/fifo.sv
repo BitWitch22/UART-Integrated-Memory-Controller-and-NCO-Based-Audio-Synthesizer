@@ -1,30 +1,30 @@
 module fifo #(
-    parameter WIDTH = 8,
-    parameter DEPTH = 32,
-    parameter POINTER_WIDTH = $clog2(DEPTH)
+    parameter int WIDTH         = 8,
+    parameter int DEPTH         = 32,
+    parameter int POINTER_WIDTH = $clog2(DEPTH)
 ) (
-    input clk, rst,
+    input  logic                   clk, 
+    input  logic                   rst,
 
     // Write side
-    input wr_en,
-    input [WIDTH-1:0] din,
-    output full,
+    input  logic                   wr_en,
+    input  logic [WIDTH-1:0]       din,
+    output logic                   full,
 
     // Read side
-    input rd_en,
-    output [WIDTH-1:0] dout,
-    output empty
+    input  logic                   rd_en,
+    output logic [WIDTH-1:0]       dout,
+    output logic                   empty
 );
 
     // Pointers are given an extra bit to track wrap-around
-    wire [POINTER_WIDTH:0] wr_ptr_val;
-    wire [POINTER_WIDTH:0] rd_ptr_val;
-    wire [POINTER_WIDTH:0] wr_ptr_next;
-    wire [POINTER_WIDTH:0] rd_ptr_next;
+    logic [POINTER_WIDTH:0] wr_ptr_val, rd_ptr_val;
+    logic [POINTER_WIDTH:0] wr_ptr_next, rd_ptr_next;
 
     // Safety checks to prevent underflow/overflow
-    wire wr_fire = wr_en & ~full;
-    wire rd_fire = rd_en & ~empty;
+    logic wr_fire, rd_fire;
+    assign wr_fire = wr_en & ~full;
+    assign rd_fire = rd_en & ~empty;
 
     assign wr_ptr_next = wr_ptr_val + 1'b1;
     assign rd_ptr_next = rd_ptr_val + 1'b1;
@@ -55,13 +55,13 @@ module fifo #(
                   (wr_ptr_val[POINTER_WIDTH-1:0] == rd_ptr_val[POINTER_WIDTH-1:0]);
 
     // 4. Memory Array Generation
-    wire [WIDTH-1:0] mem_out [DEPTH-1:0];
+    logic [WIDTH-1:0] mem_out [DEPTH];
 
-    genvar i;
     generate
-        for (i = 0; i < DEPTH; i = i + 1) begin : fifo_mem
+        for (genvar i = 0; i < DEPTH; i++) begin : fifo_mem
             // Enable writing only to the register matching the current write pointer
-            wire mem_we = wr_fire && (wr_ptr_val[POINTER_WIDTH-1:0] == i);
+            logic mem_we;
+            assign mem_we = wr_fire && (wr_ptr_val[POINTER_WIDTH-1:0] == i);
             
             REGISTER_CE #(.N(WIDTH)) mem_reg (
                 .q(mem_out[i]),
@@ -73,8 +73,7 @@ module fifo #(
     endgenerate
 
     // 5. Output Assignment
-    // Combinational read from the array. Since rd_ptr updates on the clock edge,
-    // dout effectively updates one cycle after rd_en is asserted.
+    // Combinational read from the array.
     assign dout = mem_out[rd_ptr_val[POINTER_WIDTH-1:0]];
 
 endmodule

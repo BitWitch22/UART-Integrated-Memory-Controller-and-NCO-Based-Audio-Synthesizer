@@ -1,15 +1,16 @@
 // This module instantiates the synchronizer -> debouncer -> edge detector signal chain for button inputs
 module button_parser #(
-    parameter WIDTH = 1,
-    parameter SAMPLE_CNT_MAX = 62500,
-    parameter PULSE_CNT_MAX = 200
+    parameter int WIDTH = 1,
+    parameter int SAMPLE_CNT_MAX = 62500,
+    parameter int PULSE_CNT_MAX = 200
 ) (
-    input clk,
-    input [WIDTH-1:0] in,
-    output [WIDTH-1:0] out
+    input  logic             clk,
+    input  logic [WIDTH-1:0] in,
+    output logic [WIDTH-1:0] out
 );
-    wire [WIDTH-1:0] synchronized_signals;
-    wire [WIDTH-1:0] debounced_signals;
+    // Internal signals using the 'logic' type
+    logic [WIDTH-1:0] synchronized_signals;
+    logic [WIDTH-1:0] debounced_signals;
 
     synchronizer # (
         .WIDTH(WIDTH)

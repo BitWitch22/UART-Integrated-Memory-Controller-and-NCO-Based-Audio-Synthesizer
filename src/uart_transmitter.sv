@@ -1,28 +1,33 @@
 module uart_transmitter #(
-    parameter CLOCK_FREQ = 100_000_000,
-    parameter BAUD_RATE = 115_200)
-(
-    input clk,
-    input reset,
+    parameter int CLOCK_FREQ = 100_000_000,
+    parameter int BAUD_RATE  = 115_200
+) (
+    input  logic       clk,
+    input  logic       reset,
 
-    input [7:0] data_in,
-    input data_in_valid,
-    output data_in_ready,
+    input  logic [7:0] data_in,
+    input  logic       data_in_valid,
+    output logic       data_in_ready,
 
-    output serial_out
+    output logic       serial_out
 );
-    // See diagram in the lab guide
-    localparam  SYMBOL_EDGE_TIME    =   CLOCK_FREQ / BAUD_RATE;
-    localparam  CLOCK_COUNTER_WIDTH =   $clog2(SYMBOL_EDGE_TIME);
+    // Derived parameters
+    localparam int SYMBOL_EDGE_TIME    = CLOCK_FREQ / BAUD_RATE;
+    localparam int CLOCK_COUNTER_WIDTH = $clog2(SYMBOL_EDGE_TIME);
 
-    wire tx_active_value;
-    wire [CLOCK_COUNTER_WIDTH-1:0] clock_counter_value;
-    wire [3:0] bit_counter_value;
-    wire [9:0] tx_shift_value;
+    // Internal logic signals
+    logic tx_active_value;
+    logic [CLOCK_COUNTER_WIDTH-1:0] clock_counter_value;
+    logic [3:0] bit_counter_value;
+    logic [9:0] tx_shift_value;
 
-    wire data_in_fire = data_in_valid & data_in_ready;
-    wire symbol_edge  = (clock_counter_value == SYMBOL_EDGE_TIME - 1);
-    wire done         = (bit_counter_value == 9) & symbol_edge;
+    logic data_in_fire;
+    logic symbol_edge;
+    logic done;
+
+    assign data_in_fire = data_in_valid & data_in_ready;
+    assign symbol_edge  = (clock_counter_value == SYMBOL_EDGE_TIME - 1);
+    assign done         = (bit_counter_value == 4'd9) & symbol_edge;
 
     // 1. Transmission Active Flag
     REGISTER_R_CE #(.N(1), .INIT(0)) tx_active (
@@ -52,8 +57,11 @@ module uart_transmitter #(
     );
 
     // 4. Shift Register
-    wire [9:0] tx_shift_next = data_in_fire ? {1'b1, data_in, 1'b0} : {1'b1, tx_shift_value[9:1]};
-    wire tx_shift_ce = data_in_fire | symbol_edge;
+    logic [9:0] tx_shift_next;
+    logic       tx_shift_ce;
+
+    assign tx_shift_next = data_in_fire ? {1'b1, data_in, 1'b0} : {1'b1, tx_shift_value[9:1]};
+    assign tx_shift_ce   = data_in_fire | symbol_edge;
 
     REGISTER_CE #(.N(10)) tx_shift (
         .q(tx_shift_value),
